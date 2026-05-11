@@ -14,6 +14,7 @@
 #streamer_bar,
 #command_autocomplete,
 .sc-modal-overlay,
-#mod_settings_panel {
+#mod_settings_panel,
+#sc-tooltip {
   font-family: "Baloo Tammudu 2", cursive;
 }

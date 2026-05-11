@@ -22,6 +22,33 @@ body.streamerchat {
   padding-bottom: 2.5em;
 }
 
+/* Streamer mode: scrollable container pinned between the two fixed bars */
+body.streamerchat #chat_container {
+  position: fixed;
+  top: 36px; /* auth bar height — overridden per size file */
+  bottom: 60px; /* streamer bar height — overridden per size file */
+  left: 0;
+  right: 0;
+  padding-bottom: 8px;
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+  scrollbar-color: #3a3a44 #18181b;
+  scrollbar-width: thin;
+}
+body.streamerchat #chat_container::-webkit-scrollbar {
+  width: 6px;
+}
+body.streamerchat #chat_container::-webkit-scrollbar-track {
+  background: #18181b;
+}
+body.streamerchat #chat_container::-webkit-scrollbar-thumb {
+  background: #3a3a44;
+  border-radius: 3px;
+}
+body.streamerchat #chat_container::-webkit-scrollbar-thumb:hover {
+  background: #53535e;
+}
+
 .chat_line {
   padding: 4px 8px;
   border-bottom: 1px solid #383838;
@@ -285,6 +312,9 @@ body.streamerchat {
   font-size: inherit;
   color: #efeff1;
   border-bottom: 1px solid #26262c;
+}
+.autocomplete-item.emote-ac-item {
+  align-items: center;
 }
 .autocomplete-item:last-child {
   border-bottom: none;
@@ -576,4 +606,32 @@ body.streamerchat {
 }
 .sc-add-action-form input:focus {
   border-color: #9147ff;
+}
+
+/* ---------- Emote/badge hover tooltip ---------- */
+#sc-tooltip {
+  position: fixed;
+  z-index: 1000;
+  background: #0e0e10;
+  color: #efeff1;
+  border: 1px solid #3a3a44;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 0.85em;
+  font-weight: 600;
+  pointer-events: none;
+  display: none;
+  white-space: normal;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  max-width: 200px;
+}
+
+/* ---------- Emote autocomplete image ---------- */
+.autocomplete-emote-img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  flex-shrink: 0;
+  vertical-align: middle;
+  align-self: center;
 }

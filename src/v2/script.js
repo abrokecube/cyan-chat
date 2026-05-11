@@ -88,6 +88,7 @@ Chat = {
         : false,
     emotes: {},
     badges: {},
+    badgeNames: {},
     userBadges: {},
     specialBadges: {},
     ffzapBadges: null,
@@ -1024,6 +1025,7 @@ Chat = {
           badge?.versions.forEach((version) => {
             Chat.info.badges[badge.set_id + ":" + version.id] =
               version.image_url_4x;
+            if (version.title) Chat.info.badgeNames[badge.set_id + ":" + version.id] = version.title;
           });
         });
 
@@ -1033,6 +1035,7 @@ Chat = {
               badge?.versions.forEach((version) => {
                 Chat.info.badges[badge.set_id + ":" + version.id] =
                   version.image_url_4x;
+                if (version.title) Chat.info.badgeNames[badge.set_id + ":" + version.id] = version.title;
               });
             });
 
@@ -1675,6 +1678,7 @@ Chat = {
             var $badge = $("<img/>");
             $badge.addClass("badge");
             $badge.attr("src", badge.url);
+            if (badge.description) $badge.attr("data-name", badge.description);
             $userInfo.append($badge);
           });
         }
@@ -1728,7 +1732,7 @@ Chat = {
                 });
               } else {
                 badges.push({
-                  description: badge[0],
+                  description: Chat.info.badgeNames[badge[0] + ":" + badge[1]] || badge[0],
                   url: Chat.getBadgeUrl(info, badge[0], badge[1]),
                   priority: priority,
                 });
@@ -1742,6 +1746,7 @@ Chat = {
             var $badge = $("<img/>");
             $badge.addClass("badge");
             $badge.attr("src", badge.url);
+            $badge.attr("data-name", badge.description);
             if (badge.description === "moderator") $modBadge = $badge;
             $userInfo.append($badge);
           }
@@ -1751,6 +1756,7 @@ Chat = {
             var $badge = $("<img/>");
             $badge.addClass("badge");
             $badge.attr("src", badge.url);
+            $badge.attr("data-name", badge.description);
             $userInfo.append($badge);
           }
         });
@@ -1764,6 +1770,7 @@ Chat = {
               $modBadge.remove();
             }
             $badge.attr("src", badge.url);
+            if (badge.description) $badge.attr("data-name", badge.description);
             $userInfo.append($badge);
           });
         }
@@ -1947,7 +1954,7 @@ Chat = {
               // console.log("[Emote Debug] Successfully extracted emote code:", emoteCode);
 
               replacements[emoteCode] =
-                '<img class="emote" src="https://static-cdn.jtvnw.net/emoticons/v2/' +
+                '<img class="emote" data-name="' + emoteCode + '" src="https://static-cdn.jtvnw.net/emoticons/v2/' +
                 twitchEmote[0] +
                 '/default/dark/3.0"/>';
             } catch (innerError) {
@@ -1973,11 +1980,11 @@ Chat = {
             if (word === emote[0]) {
               let replacement;
               if (emote[1].upscale) {
-                replacement = `<img class="emote upscale" src="${emote[1].image}"/>`;
+                replacement = `<img class="emote upscale" data-name="${emote[0]}" src="${emote[1].image}"/>`;
               } else if (emote[1].zeroWidth) {
-                replacement = `<img class="emote" data-zw="true" src="${emote[1].image}"/>`;
+                replacement = `<img class="emote" data-name="${emote[0]}" data-zw="true" src="${emote[1].image}"/>`;
               } else {
-                replacement = `<img class="emote" src="${emote[1].image}"/>`;
+                replacement = `<img class="emote" data-name="${emote[0]}" src="${emote[1].image}"/>`;
               }
               replacedWord = replacement;
               isReplaced = true;
@@ -1992,11 +1999,11 @@ Chat = {
             if (word === emote[0]) {
               let replacement;
               if (emote[1].upscale) {
-                replacement = `<img class="emote upscale" src="${emote[1].image}"/>`;
+                replacement = `<img class="emote upscale" data-name="${emote[0]}" src="${emote[1].image}"/>`;
               } else if (emote[1].zeroWidth) {
-                replacement = `<img class="emote" data-zw="true" src="${emote[1].image}"/>`;
+                replacement = `<img class="emote" data-name="${emote[0]}" data-zw="true" src="${emote[1].image}"/>`;
               } else {
-                replacement = `<img class="emote" src="${emote[1].image}"/>`;
+                replacement = `<img class="emote" data-name="${emote[0]}" src="${emote[1].image}"/>`;
               }
               replacedWord = replacement;
               isReplaced = true;
@@ -2086,9 +2093,9 @@ Chat = {
                 const processedWords = words.map(word => {
                   if (ytMessageEmotes[word]) {
                     const emote = ytMessageEmotes[word];
-                    if (emote.upscale) return { word: `<img class="emote upscale" src="${emote.image}"/>`, isReplaced: true };
-                    if (emote.zeroWidth) return { word: `<img class="emote" data-zw="true" src="${emote.image}"/>`, isReplaced: true };
-                    return { word: `<img class="emote" src="${emote.image}"/>`, isReplaced: true };
+                    if (emote.upscale) return { word: `<img class="emote upscale" data-name="${word}" src="${emote.image}"/>`, isReplaced: true };
+                    if (emote.zeroWidth) return { word: `<img class="emote" data-name="${word}" data-zw="true" src="${emote.image}"/>`, isReplaced: true };
+                    return { word: `<img class="emote" data-name="${word}" src="${emote.image}"/>`, isReplaced: true };
                   }
                   return { word, isReplaced: false };
                 });

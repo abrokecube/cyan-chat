@@ -69,7 +69,8 @@
   font-size: 22px;
 }
 body.streamerchat #chat_container {
-  padding-bottom: 108px;
+  top: 70px;
+  bottom: 108px;
 }
 
 body.streamerchat #info_container {

@@ -82,6 +82,18 @@ var StreamerChat = (function () {
 
     var _autocompleteIndex = -1;
 
+    // Emote autocomplete state
+    var _emoteACMode = false;
+    var _emoteACMatches = [];
+    var _emoteACPage = 0;
+    var _emoteACPageSize = 6;
+    var _emoteACIndex = 0;
+    var _emoteACTriggerStart = 0;
+
+    // Scroll-to-bottom tracking (streamer mode)
+    var _atBottom = true;
+    var _scrollObserver = null;
+
     // ============================================================
     // Utility helpers
     // ============================================================
@@ -294,22 +306,46 @@ var StreamerChat = (function () {
         // Send message on button click or Enter (not Shift+Enter)
         $("#chat_send_btn").on("click", sendMessage);
         $("#chat_input").on("keydown", function (e) {
-            // Arrow keys for autocomplete
+            var val = $(this).val();
+            // Arrow keys / Tab / Enter / Escape for autocomplete
             if ($("#command_autocomplete").is(":visible")) {
                 var items = $("#command_autocomplete .autocomplete-item");
                 if (e.key === "ArrowDown") {
                     e.preventDefault();
-                    _autocompleteIndex = Math.min(_autocompleteIndex + 1, items.length - 1);
-                    items.removeClass("selected").eq(_autocompleteIndex).addClass("selected");
+                    if (_emoteACMode) {
+                        var maxRendered = Math.min((_emoteACPage + 1) * _emoteACPageSize, _emoteACMatches.length);
+                        if (_emoteACIndex >= maxRendered - 1 && maxRendered < _emoteACMatches.length) {
+                            _emoteACPage++;
+                            _emoteACIndex++;
+                            renderEmoteAutocomplete();
+                        } else {
+                            _emoteACIndex = Math.min(_emoteACIndex + 1, maxRendered - 1);
+                            items.removeClass("selected").eq(_emoteACIndex).addClass("selected");
+                        }
+                    } else {
+                        _autocompleteIndex = Math.min(_autocompleteIndex + 1, items.length - 1);
+                        items.removeClass("selected").eq(_autocompleteIndex).addClass("selected");
+                    }
                     return;
                 }
                 if (e.key === "ArrowUp") {
                     e.preventDefault();
-                    _autocompleteIndex = Math.max(_autocompleteIndex - 1, 0);
-                    items.removeClass("selected").eq(_autocompleteIndex).addClass("selected");
+                    if (_emoteACMode) {
+                        _emoteACIndex = Math.max(_emoteACIndex - 1, 0);
+                        items.removeClass("selected").eq(_emoteACIndex).addClass("selected");
+                    } else {
+                        _autocompleteIndex = Math.max(_autocompleteIndex - 1, 0);
+                        items.removeClass("selected").eq(_autocompleteIndex).addClass("selected");
+                    }
                     return;
                 }
-                if (e.key === "Enter" || e.key === "Tab") {
+                if (e.key === "Tab") {
+                    e.preventDefault();
+                    var sel = items.filter(".selected");
+                    if (sel.length) sel.trigger("click");
+                    return;
+                }
+                if (e.key === "Enter") {
                     var sel = items.filter(".selected");
                     if (sel.length) {
                         e.preventDefault();
@@ -321,6 +357,16 @@ var StreamerChat = (function () {
                     hideAutocomplete();
                     return;
                 }
+            } else if (e.key === "Tab" && !val.startsWith("/")) {
+                // Tab-triggered emote autocomplete: match the word before the cursor
+                var cursorPos = this.selectionStart;
+                var beforeCursor = val.substring(0, cursorPos);
+                var wordMatch = beforeCursor.match(/(\S+)$/);
+                if (wordMatch && wordMatch[1].length >= 1) {
+                    e.preventDefault();
+                    showEmoteAutocomplete(wordMatch[1], cursorPos - wordMatch[1].length, cursorPos);
+                }
+                return;
             }
             if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
@@ -374,6 +420,41 @@ var StreamerChat = (function () {
         $("#prediction_add_outcome").on("click", function () { addChoiceRow("#prediction_outcomes", "Outcome", 10, 25); });
         $("#prediction_submit_btn").on("click", submitPrediction);
         bindChoiceRemoveButtons("#prediction_outcomes");
+
+        // Scrollable chat: auto-scroll to bottom unless user has scrolled up
+        var $cc = $("#chat_container");
+        $cc.on("scroll", function () {
+            var el = this;
+            _atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 40;
+        });
+        _scrollObserver = new MutationObserver(function () {
+            if (_atBottom) {
+                var el = $cc[0];
+                el.scrollTop = el.scrollHeight;
+            }
+        });
+        _scrollObserver.observe($cc[0], { childList: true });
+
+        // Emote/badge tooltip
+        var $tooltip = $('<div id="sc-tooltip"></div>').appendTo("body");
+        $(document).on("mouseenter", "img.emote[data-name], img.badge[data-name]", function (e) {
+            $tooltip.text($(this).attr("data-name")).show();
+            positionTooltip(e);
+        }).on("mouseleave", "img.emote, img.badge", function () {
+            $tooltip.hide();
+        }).on("mousemove", "img.emote[data-name], img.badge[data-name]", function (e) {
+            positionTooltip(e);
+        });
+
+        function positionTooltip(e) {
+            var x = e.clientX, y = e.clientY;
+            var tw = $tooltip.outerWidth() || 0;
+            var th = $tooltip.outerHeight() || 20;
+            var left = Math.min(x + 12, window.innerWidth - tw - 8);
+            var top = y - th - 8;
+            if (top < 0) top = y + 16;
+            $tooltip.css({ left: left, top: top });
+        }
     }
 
     // ============================================================
@@ -883,63 +964,160 @@ var StreamerChat = (function () {
 
     function handleAutocompleteInput() {
         var val = $("#chat_input").val();
-        if (!val.startsWith("/")) { hideAutocomplete(); return; }
+        if (val.startsWith("/")) {
+            // Clear emote AC if switching to command mode
+            if (_emoteACMode) { _emoteACMode = false; }
 
-        var typedWord = val.split(" ")[0].toLowerCase();
-        var matchedCommands = SLASH_COMMANDS.filter(function (c) {
-            return c.cmd.startsWith(typedWord);
-        });
+            var typedWord = val.split(" ")[0].toLowerCase();
+            var matchedCommands = SLASH_COMMANDS.filter(function (c) {
+                return c.cmd.startsWith(typedWord);
+            });
 
-        // If exactly one word and it matches a user-arg command, also offer recent chatters
-        var afterSlash = val.slice(1);
-        var parts = afterSlash.split(" ");
-        var needsUser = ["/ban", "/unban", "/timeout", "/untimeout", "/mod", "/unmod", "/vip", "/unvip", "/raid"].includes(parts[0] ? "/" + parts[0] : "");
-        var recentMatches = [];
-        if (needsUser && parts.length >= 2) {
-            var prefix = parts[parts.length - 1].toLowerCase();
-            recentMatches = getRecentChatters(prefix).slice(0, 5);
-            matchedCommands = [];
+            // If exactly one word and it matches a user-arg command, also offer recent chatters
+            var afterSlash = val.slice(1);
+            var parts = afterSlash.split(" ");
+            var needsUser = ["/ban", "/unban", "/timeout", "/untimeout", "/mod", "/unmod", "/vip", "/unvip", "/raid"].includes(parts[0] ? "/" + parts[0] : "");
+            var recentMatches = [];
+            if (needsUser && parts.length >= 2) {
+                var prefix = parts[parts.length - 1].toLowerCase();
+                recentMatches = getRecentChatters(prefix).slice(0, 5);
+                matchedCommands = [];
+            }
+
+            if (!matchedCommands.length && !recentMatches.length) { hideAutocomplete(); return; }
+
+            var $ac = $("#command_autocomplete").empty().show();
+            _autocompleteIndex = 0;
+
+            matchedCommands.forEach(function (c) {
+                var $item = $("<div class='autocomplete-item'></div>")
+                    .append("<span class='autocomplete-cmd'>" + escapeHtml(c.cmd) + "</span>")
+                    .append("<span class='autocomplete-desc'>" + escapeHtml(c.desc) + "</span>")
+                    .on("click", function () {
+                        var inputVal = c.cmd + " ";
+                        if (c.cmd === "/poll") { openPollModal(); hideAutocomplete(); $("#chat_input").val("").focus(); return; }
+                        if (c.cmd === "/prediction") { openPredictionModal(); hideAutocomplete(); $("#chat_input").val("").focus(); return; }
+                        $("#chat_input").val(inputVal).focus();
+                        hideAutocomplete();
+                    });
+                $ac.append($item);
+            });
+
+            recentMatches.forEach(function (nick) {
+                var partsArr = val.split(" ");
+                partsArr[partsArr.length - 1] = nick;
+                var completed = partsArr.join(" ") + " ";
+                var $item = $("<div class='autocomplete-item'></div>")
+                    .append("<span class='autocomplete-cmd'>" + escapeHtml(nick) + "</span>")
+                    .on("click", function () {
+                        $("#chat_input").val(completed).focus();
+                        hideAutocomplete();
+                    });
+                $ac.append($item);
+            });
+
+            // Auto-highlight the first item so Tab/Enter works immediately.
+            $ac.children(".autocomplete-item").first().addClass("selected");
+            return;
         }
 
-        if (!matchedCommands.length && !recentMatches.length) { hideAutocomplete(); return; }
+        // Check for :word emote trigger before the cursor
+        var input = document.getElementById("chat_input");
+        var cursorPos = input.selectionStart;
+        var beforeCursor = val.substring(0, cursorPos);
+        var colonMatch = beforeCursor.match(/:(\w*)$/);
+        if (colonMatch) {
+            showEmoteAutocomplete(colonMatch[1], cursorPos - colonMatch[0].length, cursorPos);
+            return;
+        }
 
-        var $ac = $("#command_autocomplete").empty().show();
-        _autocompleteIndex = 0;
-
-        matchedCommands.forEach(function (c) {
-            var $item = $("<div class='autocomplete-item'></div>")
-                .append("<span class='autocomplete-cmd'>" + escapeHtml(c.cmd) + "</span>")
-                .append("<span class='autocomplete-desc'>" + escapeHtml(c.desc) + "</span>")
-                .on("click", function () {
-                    var inputVal = c.cmd + " ";
-                    if (c.cmd === "/poll") { openPollModal(); hideAutocomplete(); $("#chat_input").val("").focus(); return; }
-                    if (c.cmd === "/prediction") { openPredictionModal(); hideAutocomplete(); $("#chat_input").val("").focus(); return; }
-                    $("#chat_input").val(inputVal).focus();
-                    hideAutocomplete();
-                });
-            $ac.append($item);
-        });
-
-        recentMatches.forEach(function (nick) {
-            var partsArr = val.split(" ");
-            partsArr[partsArr.length - 1] = nick;
-            var completed = partsArr.join(" ") + " ";
-            var $item = $("<div class='autocomplete-item'></div>")
-                .append("<span class='autocomplete-cmd'>" + escapeHtml(nick) + "</span>")
-                .on("click", function () {
-                    $("#chat_input").val(completed).focus();
-                    hideAutocomplete();
-                });
-            $ac.append($item);
-        });
-
-        // Auto-highlight the first item so Tab/Enter works immediately.
-        $ac.children(".autocomplete-item").first().addClass("selected");
+        hideAutocomplete();
     }
 
     function hideAutocomplete() {
         $("#command_autocomplete").hide().empty();
         _autocompleteIndex = -1;
+        _emoteACMode = false;
+        _emoteACMatches = [];
+        _emoteACIndex = 0;
+    }
+
+    // ============================================================
+    // Emote autocomplete
+    // ============================================================
+
+    function getEmoteList() {
+        var seen = {};
+        var result = [];
+        // Channel emotes (BTTV, FFZ, 7TV)
+        var emotes = Chat.info.emotes || {};
+        Object.keys(emotes).forEach(function (name) {
+            if (!seen[name]) {
+                seen[name] = true;
+                result.push({ name: name, image: emotes[name].image });
+            }
+        });
+        // Personal 7TV emotes of the logged-in streamer
+        var streamerUserId = Chat.info.streamerUserId;
+        if (streamerUserId && Chat.info.seventvPersonalEmotes && Chat.info.seventvPersonalEmotes[streamerUserId]) {
+            var personal = Chat.info.seventvPersonalEmotes[streamerUserId];
+            Object.keys(personal).forEach(function (name) {
+                if (!seen[name]) {
+                    seen[name] = true;
+                    result.push({ name: name, image: personal[name].image });
+                }
+            });
+        }
+        return result;
+    }
+
+    function showEmoteAutocomplete(prefix, triggerStart, cursorEnd) {
+        var allEmotes = getEmoteList();
+        var lc = prefix.toLowerCase();
+        _emoteACMatches = allEmotes.filter(function (e) {
+            return e.name.toLowerCase().includes(lc);
+        }).sort(function (a, b) {
+            var aStarts = a.name.toLowerCase().startsWith(lc);
+            var bStarts = b.name.toLowerCase().startsWith(lc);
+            if (aStarts && !bStarts) return -1;
+            if (!aStarts && bStarts) return 1;
+            return a.name.localeCompare(b.name);
+        });
+        _emoteACTriggerStart = triggerStart;
+        _emoteACPage = 0;
+        _emoteACIndex = 0;
+        _emoteACMode = true;
+        renderEmoteAutocomplete();
+    }
+
+    function renderEmoteAutocomplete() {
+        var $ac = $("#command_autocomplete").empty();
+        var slice = _emoteACMatches.slice(0, (_emoteACPage + 1) * _emoteACPageSize);
+        if (slice.length === 0) { hideAutocomplete(); return; }
+        slice.forEach(function (emote, i) {
+            var $item = $("<div class='autocomplete-item emote-ac-item'></div>");
+            if (i === _emoteACIndex) $item.addClass("selected");
+            $item.append('<img class="autocomplete-emote-img" src="' + emote.image + '" alt="">');
+            $item.append('<span class="autocomplete-cmd">' + escapeHtml(emote.name) + '</span>');
+            (function (name) {
+                $item.on("click", function () { insertEmote(name); });
+            })(emote.name);
+            $ac.append($item);
+        });
+        $ac.show();
+    }
+
+    function insertEmote(name) {
+        var input = document.getElementById("chat_input");
+        var val = input.value;
+        var cursorPos = input.selectionStart;
+        var before = val.substring(0, _emoteACTriggerStart);
+        var after = val.substring(cursorPos);
+        input.value = before + name + " " + after;
+        var newCursor = _emoteACTriggerStart + name.length + 1;
+        input.setSelectionRange(newCursor, newCursor);
+        hideAutocomplete();
+        $(input).focus();
     }
 
     function getRecentChatters(prefix) {

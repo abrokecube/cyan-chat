@@ -55,7 +55,7 @@ function loadCustomFont(name) {
   link.rel = 'stylesheet';
   link.href = `https://fonts.googleapis.com/css?family=${fontName}`;
   document.head.appendChild(link);
-  $("#chat_container, #streamer_auth_bar, #streamer_bar, #command_autocomplete, .sc-modal-overlay, #mod_settings_panel")
+  $("#chat_container, #streamer_auth_bar, #streamer_bar, #command_autocomplete, .sc-modal-overlay, #mod_settings_panel, #sc-tooltip")
     .css("font-family", fontName);
 }
 
