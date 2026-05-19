@@ -971,6 +971,7 @@ var StreamerChat = (function () {
         emoteScale: 1,
         msgWeight: 400,
         userWeight: 700,
+        scale: 1,
         platformIndicator: "none",
         piStyle: "solid",
         piSides: "left",
@@ -1054,6 +1055,21 @@ var StreamerChat = (function () {
         root.style.setProperty("--sc-msg-weight", String(settings.msgWeight != null ? settings.msgWeight : DEFAULT_DISPLAY.msgWeight));
         root.style.setProperty("--sc-user-weight", String(settings.userWeight != null ? settings.userWeight : DEFAULT_DISPLAY.userWeight));
 
+        // Scale
+        var scaleVal = parseFloat(settings.scale) || 1;
+        var $container = $("#chat_container");
+        if (scaleVal !== 1) {
+            $container[0].style.transform = "scale(" + scaleVal + ")";
+            $container[0].style.transformOrigin = "top left";
+            $container[0].style.height = "calc((100% / " + scaleVal + ") - ((var(--streamer-auth-bar-height) + var(--streamer-bar-height)) / " + scaleVal + "))";
+            $container[0].style.width = "calc(100% / " + scaleVal + ")";
+        } else {
+            $container[0].style.transform = "";
+            $container[0].style.transformOrigin = "";
+            $container[0].style.height = "";
+            $container[0].style.width = "";
+        }
+
         // Platform indicator
         applyPlatformIndicator(
             settings.platformIndicator || "none",
@@ -1084,6 +1100,7 @@ var StreamerChat = (function () {
         $("#ds_height").val(String(settings.height != null ? settings.height : DEFAULT_DISPLAY.height));
         $("#ds_msg_weight").val(String(settings.msgWeight != null ? settings.msgWeight : DEFAULT_DISPLAY.msgWeight));
         $("#ds_user_weight").val(String(settings.userWeight != null ? settings.userWeight : DEFAULT_DISPLAY.userWeight));
+        $("#ds_scale").val(String(settings.scale != null ? settings.scale : DEFAULT_DISPLAY.scale));
 
         // Emotes
         $("#ds_emote_scale").val(String(settings.emoteScale != null ? settings.emoteScale : DEFAULT_DISPLAY.emoteScale));
@@ -1121,6 +1138,7 @@ var StreamerChat = (function () {
             height: parseInt($("#ds_height").val()),
             msgWeight: parseInt($("#ds_msg_weight").val()) || 400,
             userWeight: parseInt($("#ds_user_weight").val()) || 700,
+            scale: parseFloat($("#ds_scale").val()) || 1,
             emoteScale: parseInt($("#ds_emote_scale").val()) || 1,
             platformIndicator: $("#ds_pi_mode").val() || "none",
             piStyle: $("#ds_pi_style").val() || "solid",

@@ -49,6 +49,10 @@
 }
 
 /* ---------- Streamer bar sizing ---------- */
+:root {
+  --streamer-auth-bar-height: 34px;
+  --streamer-bar-height: 52px;
+}
 #streamer_auth_bar {
   font-size: 14px;
   height: 34px;
