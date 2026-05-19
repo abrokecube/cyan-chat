@@ -98,12 +98,27 @@ const toTitleCase = (phrase) => {
     .join(' ');
 };
 
-function loadCustomFont(name) {
+async function loadCustomFont(name) {
   const fontName = toTitleCase(name);
+  const familyParam = fontName.replace(/ /g, '+');
+  const variableUrl = `https://fonts.googleapis.com/css2?family=${familyParam}:wght@100..900&display=swap`;
+  const basicUrl = `https://fonts.googleapis.com/css2?family=${familyParam}&display=swap`;
+
+  let url = basicUrl;
+  try {
+    const res = await fetch(variableUrl);
+    if (res.ok) url = variableUrl;
+  } catch (e) { /* network error — use basic */ }
+
+  // Remove any previous custom-font link so re-applying doesn't stack
+  document.querySelectorAll('link[data-custom-font]').forEach(el => el.remove());
+
   const link = document.createElement('link');
   link.rel = 'stylesheet';
-  link.href = `https://fonts.googleapis.com/css?family=${fontName}`;
+  link.href = url;
+  link.setAttribute('data-custom-font', fontName);
   document.head.appendChild(link);
+
   $("#chat_container, #streamer_auth_bar, #streamer_bar, #command_autocomplete, .sc-modal-overlay, #mod_settings_panel, #sc-tooltip")
     .css("font-family", fontName);
 }
