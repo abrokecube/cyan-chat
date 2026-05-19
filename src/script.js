@@ -468,6 +468,7 @@ function generateURL(event) {
         show_redeems: !$showRedeems.is(":checked") ? "false" : false,
         highlight_mentions: $highlightMentions.is(":checked"),
         highlight_mention_color: $highlightMentions.is(":checked") ? $highlightMentionColor.val().replace("#", "") : false,
+        link_urls: $linkUrls.is(":checked"),
         normal_chat: $normalChat.is(":checked"),
         streamer_chat: $streamerChat.is(":checked") ? "true" : false,
         platform_indicator: $platformIndicator.val() !== "none" ? $platformIndicator.val() : false,
@@ -571,6 +572,7 @@ function updatePreview() {
             show_redeems: !$showRedeems.is(":checked") ? "false" : false,
             highlight_mentions: $highlightMentions.is(":checked"),
             highlight_mention_color: $highlightMentions.is(":checked") ? $highlightMentionColor.val().replace("#", "") : false,
+            link_urls: $linkUrls.is(":checked"),
             normal_chat: $normalChat.is(":checked"),
             streamer_chat: $streamerChat.is(":checked") ? "true" : false,
             platform_indicator: $platformIndicator.val() !== "none" ? $platformIndicator.val() : false,
@@ -654,6 +656,7 @@ const $gigantify = $('input[name="gigantify"]');
 const $showRedeems = $('input[name="show_redeems"]');
 const $highlightMentions = $('input[name="highlight_mentions"]');
 const $highlightMentionColor = $('input[name="highlight_mention_color"]');
+const $linkUrls = $('input[name="link_urls"]');
 const $normalChat = $('input[name="normal_chat"]');
 const $streamerChat = $('input[name="streamer_chat"]');
 const $platformIndicator = $('select[name="platform_indicator"]');

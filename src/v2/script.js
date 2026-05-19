@@ -177,6 +177,10 @@ Chat = {
       "normal_chat" in $.QueryString
         ? $.QueryString.normal_chat.toLowerCase() === "true"
         : false,
+    linkUrls:
+      "link_urls" in $.QueryString
+        ? $.QueryString.link_urls.toLowerCase() === "true"
+        : false,
     streamerChat:
       "streamer_chat" in $.QueryString
         ? $.QueryString.streamer_chat.toLowerCase() === "true"
@@ -2294,6 +2298,11 @@ Chat = {
 
       // Finalize the message HTML
       $message.html(message);
+
+      // URL highlighting / linkification
+      if (Chat.info.streamerChat || Chat.info.linkUrls) {
+        linkifyUrls($message, Chat.info.streamerChat);
+      }
 
       // Text wrapping for per-word stroke removed — stroke filter now applied at .message level via CSS
 

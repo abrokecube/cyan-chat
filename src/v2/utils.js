@@ -77,10 +77,10 @@ function applyPlatformIndicator(mode, sides, style, thickness, radius) {
     document.body.classList.add("pi-outline-" + style);
     var sideList = (sides || "left").split(",");
     var th = (thickness || 3) + "px";
-    document.documentElement.style.setProperty("--pi-top",    sideList.includes("top")    ? th : "0px");
-    document.documentElement.style.setProperty("--pi-right",  sideList.includes("right")  ? th : "0px");
+    document.documentElement.style.setProperty("--pi-top", sideList.includes("top") ? th : "0px");
+    document.documentElement.style.setProperty("--pi-right", sideList.includes("right") ? th : "0px");
     document.documentElement.style.setProperty("--pi-bottom", sideList.includes("bottom") ? th : "0px");
-    document.documentElement.style.setProperty("--pi-left",   sideList.includes("left")   ? th : "0px");
+    document.documentElement.style.setProperty("--pi-left", sideList.includes("left") ? th : "0px");
     document.documentElement.style.setProperty("--pi-radius", (radius || 0) + "px");
     if (style === "fade") {
       // For fade, only one side is used; pick the first one
@@ -118,6 +118,51 @@ function escapeHtml(message) {
     .replace(/&/g, "&amp;")
     .replace(/(<)(?!3)/g, "&lt;")
     .replace(/(>)(?!\()/g, "&gt;");
+}
+
+// Linkify URLs in a jQuery element's text nodes.
+// If clickable=true, wraps them in <a> tags (opens in new tab).
+// If clickable=false, wraps them in <span class="chat-url"> for styling only.
+function linkifyUrls($element, clickable) {
+  var urlRegex = /(https?:\/\/\S+)/g;
+  $element.contents().each(function () {
+    var node = this;
+    if (node.nodeType === 3) { // TEXT_NODE
+      var text = node.nodeValue;
+      if (!urlRegex.test(text)) { urlRegex.lastIndex = 0; return; }
+      urlRegex.lastIndex = 0;
+      // Split on captured URLs: odd indices are URLs, even are plain text
+      var parts = text.split(urlRegex);
+      var fragment = document.createDocumentFragment();
+      for (var i = 0; i < parts.length; i++) {
+        if (i % 2 === 0) {
+          if (parts[i]) fragment.appendChild(document.createTextNode(parts[i]));
+        } else {
+          // Strip trailing punctuation that's unlikely part of the URL
+          var url = parts[i].replace(/[.,!?;:'")\]>]+$/, '');
+          var trailing = parts[i].slice(url.length);
+          if (clickable) {
+            var a = document.createElement('a');
+            a.href = url;
+            a.target = '_blank';
+            a.rel = 'noopener noreferrer';
+            a.className = 'chat-url';
+            a.textContent = url;
+            fragment.appendChild(a);
+          } else {
+            var span = document.createElement('span');
+            span.className = 'chat-url';
+            span.textContent = url;
+            fragment.appendChild(span);
+          }
+          if (trailing) fragment.appendChild(document.createTextNode(trailing));
+        }
+      }
+      node.parentNode.replaceChild(fragment, node);
+    } else if (node.nodeType === 1 && node.nodeName !== 'IMG' && node.nodeName !== 'A') {
+      linkifyUrls($(node), clickable);
+    }
+  });
 }
 
 // function TwitchOAuth() {

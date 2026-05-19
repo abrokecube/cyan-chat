@@ -411,6 +411,22 @@ body {
   border-radius: 4px;
 }
 
+/* URL Highlight */
+span.chat-url {
+  color: #4a9eff;
+}
+
+a.chat-url {
+  color: #4a9eff;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+a.chat-url:hover {
+  color: #78b8ff;
+  text-decoration: underline;
+}
+
 /* ============================================================
    Platform Indicators
    Controlled by body classes: pi-badge, pi-outline, pi-minimal
