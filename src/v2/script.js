@@ -938,6 +938,90 @@ Chat = {
     });
   },
 
+  loadBadges: function () {
+    // Load badges
+    TwitchAPI("/chat/badges/global").done(function (res) {
+      res?.data.forEach((badge) => {
+        badge?.versions.forEach((version) => {
+          Chat.info.badges[badge.set_id + ":" + version.id] =
+            version.image_url_4x;
+          if (version.title) Chat.info.badgeNames[badge.set_id + ":" + version.id] = version.title;
+        });
+      });
+
+      if (Chat.info.channelID) {
+        TwitchAPI("/chat/badges?broadcaster_id=" + Chat.info.channelID).done(
+          function (res) {
+            res?.data.forEach((badge) => {
+              badge?.versions.forEach((version) => {
+                Chat.info.badges[badge.set_id + ":" + version.id] =
+                  version.image_url_4x;
+                if (version.title) Chat.info.badgeNames[badge.set_id + ":" + version.id] = version.title;
+              });
+            });
+
+            $.getJSON(
+              "https://api.frankerfacez.com/v1/_room/id/" +
+              encodeURIComponent(Chat.info.channelID)
+            ).done(function (res) {
+              const badgeUrl =
+                "https://cdn.frankerfacez.com/room-badge/mod/" +
+                res.room.id +
+                "/4/rounded";
+              const fallbackBadgeUrl =
+                "https://static-cdn.jtvnw.net/badges/v1/3267646d-33f0-4b17-b3df-f923a41db1d0/3";
+              if (res.room.moderator_badge) {
+                fetch(badgeUrl)
+                  .then((response) => {
+                    if (response.status === 404) {
+                      Chat.info.badges["moderator:1"] = fallbackBadgeUrl;
+                    } else {
+                      Chat.info.badges["moderator:1"] = badgeUrl;
+                    }
+                  })
+                  .catch((error) => {
+                    console.error("Error fetching the badge URL:", error);
+                    Chat.info.badges["moderator:1"] = fallbackBadgeUrl;
+                  });
+              }
+              if (res.room.vip_badge) {
+                Chat.info.badges["vip:1"] =
+                  "https://cdn.frankerfacez.com/room-badge/vip/" +
+                  res.room.id +
+                  "/4";
+              }
+            });
+          }
+        );
+      }
+    });
+
+    if (!Chat.info.hideBadges) {
+      $.getJSON("https://api.ffzap.com/v1/supporters")
+        .done(function (res) {
+          Chat.info.ffzapBadges = res;
+        })
+        .fail(function () {
+          Chat.info.ffzapBadges = [];
+        });
+      $.getJSON("https://api.betterttv.net/3/cached/badges")
+        .done(function (res) {
+          Chat.info.bttvBadges = res;
+        })
+        .fail(function () {
+          Chat.info.bttvBadges = [];
+        });
+
+      $.getJSON("/api/chatterino-badges")
+        .done(function (res) {
+          Chat.info.chatterinoBadges = res.badges;
+        })
+        .fail(function () {
+          Chat.info.chatterinoBadges = [];
+        });
+    }
+  },
+
   load: function (callback) {
     GetTwitchUserID(Chat.info.channel).done(function (res) {
       let error = false;
@@ -1065,7 +1149,7 @@ Chat = {
         appendCSS("height", height);
       }
       if (Chat.info.stroke && Chat.info.stroke > 0) {
-        if (Chat.info.stroke > 2) Chat.info.stroke = 2
+        if (Chat.info.stroke > 3) Chat.info.stroke = 3
         let stroke = strokes[Chat.info.stroke - 1];
         appendCSS("stroke", stroke);
       }
@@ -1107,102 +1191,12 @@ Chat = {
       if (Chat.info.streamerChat && typeof StreamerChat !== "undefined") StreamerChat.init();
 
       // Load badges
-      TwitchAPI("/chat/badges/global").done(function (res) {
-        res?.data.forEach((badge) => {
-          badge?.versions.forEach((version) => {
-            Chat.info.badges[badge.set_id + ":" + version.id] =
-              version.image_url_4x;
-            if (version.title) Chat.info.badgeNames[badge.set_id + ":" + version.id] = version.title;
-          });
-        });
+      Chat.loadBadges();
 
-        TwitchAPI("/chat/badges?broadcaster_id=" + Chat.info.channelID).done(
-          function (res) {
-            res?.data.forEach((badge) => {
-              badge?.versions.forEach((version) => {
-                Chat.info.badges[badge.set_id + ":" + version.id] =
-                  version.image_url_4x;
-                if (version.title) Chat.info.badgeNames[badge.set_id + ":" + version.id] = version.title;
-              });
-            });
-
-            // const badgeUrl =
-            //   "https://cdn.frankerfacez.com/room-badge/mod/" +
-            //   Chat.info.channel +
-            //   "/4/rounded";
-            // const fallbackBadgeUrl =
-            //   "https://static-cdn.jtvnw.net/badges/v1/3267646d-33f0-4b17-b3df-f923a41db1d0/3";
-
-            $.getJSON(
-              "https://api.frankerfacez.com/v1/_room/id/" +
-              encodeURIComponent(Chat.info.channelID)
-            ).done(function (res) {
-              const badgeUrl =
-                "https://cdn.frankerfacez.com/room-badge/mod/" +
-                res.room.id +
-                "/4/rounded";
-              const fallbackBadgeUrl =
-                "https://static-cdn.jtvnw.net/badges/v1/3267646d-33f0-4b17-b3df-f923a41db1d0/3";
-              if (res.room.moderator_badge) {
-                fetch(badgeUrl)
-                  .then((response) => {
-                    if (response.status === 404) {
-                      Chat.info.badges["moderator:1"] = fallbackBadgeUrl;
-                    } else {
-                      Chat.info.badges["moderator:1"] = badgeUrl;
-                    }
-                  })
-                  .catch((error) => {
-                    console.error("Error fetching the badge URL:", error);
-                    Chat.info.badges["moderator:1"] = fallbackBadgeUrl;
-                  });
-              }
-              if (res.room.vip_badge) {
-                Chat.info.badges["vip:1"] =
-                  "https://cdn.frankerfacez.com/room-badge/vip/" +
-                  res.room.id +
-                  "/4";
-              }
-            });
-          }
-        );
-      });
-
-      if (!Chat.info.hideBadges) {
-        $.getJSON("https://api.ffzap.com/v1/supporters")
-          .done(function (res) {
-            Chat.info.ffzapBadges = res;
-          })
-          .fail(function () {
-            Chat.info.ffzapBadges = [];
-          });
-        $.getJSON("https://api.betterttv.net/3/cached/badges")
-          .done(function (res) {
-            Chat.info.bttvBadges = res;
-          })
-          .fail(function () {
-            Chat.info.bttvBadges = [];
-          });
-
-        /* Deprecated endpoint
-                $.getJSON('https://7tv.io/v3/badges?user_identifier=login')
-                    .done(function(res) {
-                        Chat.info.seventvBadges = res.badges;
-                    })
-                    .fail(function() {
-                        Chat.info.seventvBadges = [];
-                    });
-                */
-
-        $.getJSON("/api/chatterino-badges")
-          .done(function (res) {
-            Chat.info.chatterinoBadges = res.badges;
-          })
-          .fail(function () {
-            Chat.info.chatterinoBadges = [];
-          });
-
-      }
+      // Reload all chat badges once every hour (3,600,000 ms)
+      setInterval(function () {
+        Chat.loadBadges();
+      }, 3600000);
 
       // Load cheers images
       TwitchAPI("/bits/cheermotes?broadcaster_id=" + Chat.info.channelID).done(
@@ -2273,8 +2267,9 @@ Chat = {
           // Add a class to the message for styling
           $message.addClass('emote-only');
 
-          // Find all emotes and add the large class
-          $message.find('img.emote, img.emoji').addClass('large-emote');
+          if (emoteCount == 1) {
+            $message.find('img.emote, img.emoji').addClass('large-emote');
+          }
         }
       }
 

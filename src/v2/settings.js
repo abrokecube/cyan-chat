@@ -23,6 +23,7 @@ const sizes = [
 const strokes = [
     'fine',
     'thick',
+    'precise_fine'
 ];
 
 const shadows = [

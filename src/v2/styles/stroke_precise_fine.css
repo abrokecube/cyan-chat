@@ -1,0 +1,64 @@
+:root {
+  --stroke-size: 0.7 !important;
+  --stroke-1: calc(1px * var(--stroke-size)) !important;
+  --stroke-2: calc(2px * var(--stroke-size)) !important;
+  --stroke-3: calc(3px * var(--stroke-size)) !important;
+  --stroke-1-min: calc(-1px * var(--stroke-size)) !important;
+  --stroke-2-min: calc(-2px * var(--stroke-size)) !important;
+  --stroke-3-min: calc(-3px * var(--stroke-size)) !important;
+  --shadow: #000000;
+}
+
+.chat_line .message,
+.chat_line .nick,
+.chat_line .colon,
+.chat_line .mention {
+  -webkit-text-stroke: calc(6px * var(--stroke-size)) var(--shadow) !important;
+  paint-order: markers stroke fill !important;
+}
+
+/* Optimization: Use pseudo-elements for paint stroke AND background to solve stacking context issues */
+/* Layer 1 (Front): Main Element (Content). Transparent text. */
+.chat_line .paint {
+  position: relative;
+  white-space: nowrap;
+  /* Essential to keep the absolute stroke layer aligned */
+  text-shadow: none !important;
+  /* No shadow on the main element */
+  background: none !important;
+  /* Hide inline background so we can move it to ::after */
+  color: transparent !important;
+  /* Hide inline color */
+  line-height: normal;
+  -webkit-text-stroke: 0px var(--shadow) !important;
+}
+
+/* Layer 2 (Middle): Gradient Background. z-index -1 */
+.chat_line .paint::after {
+  content: attr(data-text);
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: -1;
+  background-image: var(--paint-bg);
+  background-color: var(--paint-bg-color);
+  background-position: var(--paint-pos);
+  background-size: cover;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Layer 3 (Back): Stroke. z-index -2 */
+.chat_line .paint::before {
+  content: attr(data-text);
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: -2;
+  /* Make text body transparent so only the stroke shadow is visible */
+  -webkit-text-fill-color: transparent;
+  /* Apply the stroke shadow here */
+  paint-order: markers stroke fill !important;
+  -webkit-text-stroke: 4px var(--shadow) !important;
+}
