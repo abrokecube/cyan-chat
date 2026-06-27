@@ -301,6 +301,202 @@ function doesStringMatchPattern(stringToTest, info) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Message filter engine
+// ---------------------------------------------------------------------------
+
+function parseFiltersQuery(raw) {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch (e) {
+    console.error("Failed to parse filters query param:", e);
+    return null;
+  }
+}
+
+function legacyRegexFilter(raw) {
+  if (!raw) return null;
+  return [
+    {
+      pattern: raw,
+      type: "regex",
+      action: "hide",
+      replacement: "",
+      caseSensitive: true,
+    },
+  ];
+}
+
+function splitPatternTerms(pattern) {
+  // Split on commas not preceded by a backslash. Commas escaped with \ stay
+  // literal and are handled by the wildcard parser.
+  return pattern
+    .split(/(?<!\\),/)
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0);
+}
+
+function wildcardTermToRegex(term, captureWildcards) {
+  let regex = "";
+  let captureCount = 0;
+  let escaped = false;
+  for (const ch of term) {
+    if (escaped) {
+      // The escape consumed the backslash; emit the escaped character literally.
+      regex += escapeRegExp(ch);
+      escaped = false;
+    } else if (ch === "\\") {
+      escaped = true;
+    } else if (ch === "*") {
+      if (captureWildcards) {
+        regex += "(\\S*)";
+        captureCount++;
+      } else {
+        regex += "(?:\\S*)";
+      }
+    } else if (ch === "?") {
+      regex += "\\S";
+    } else {
+      regex += escapeRegExp(ch);
+    }
+  }
+  return { source: regex, captureCount };
+}
+
+function compileFilters(filters) {
+  if (!Array.isArray(filters)) return [];
+  const compiled = [];
+
+  for (const f of filters) {
+    if (!f || typeof f.pattern !== "string" || !f.pattern.trim()) continue;
+
+    const type = f.type === "regex" ? "regex" : "wildcard";
+    const action = ["hide", "mask", "replace"].includes(f.action)
+      ? f.action
+      : "hide";
+    const replacement =
+      typeof f.replacement === "string" ? f.replacement : "";
+    const caseSensitive = !!f.caseSensitive;
+
+    const terms = splitPatternTerms(f.pattern);
+    if (terms.length === 0) continue;
+
+    const flags =
+      (caseSensitive ? "" : "i") + (action !== "hide" ? "g" : "");
+
+    try {
+      if (type === "regex") {
+        const source = terms.map((t) => `(?:${t})`).join("|");
+        const regex = new RegExp(source, flags);
+        compiled.push({
+          pattern: f.pattern,
+          type,
+          action,
+          replacement,
+          caseSensitive,
+          regex,
+        });
+      } else if (action === "replace") {
+        // Wildcard replace needs each term as its own regex so the captured
+        // wildcard segments line up with the replacement * placeholders.
+        const regexes = terms.map((term) => {
+          const converted = wildcardTermToRegex(term, true);
+          const bounded = `(?<!\\S)(?:${converted.source})(?!\\S)`;
+          return {
+            regex: new RegExp(bounded, flags),
+            captureCount: converted.captureCount,
+          };
+        });
+        compiled.push({
+          pattern: f.pattern,
+          type,
+          action,
+          replacement,
+          caseSensitive,
+          regexes,
+        });
+      } else {
+        const source = terms
+          .map((term) => `(?:${wildcardTermToRegex(term, false).source})`)
+          .join("|");
+        // Match only within a single whitespace-delimited word.
+        const bounded = `(?<!\\S)(?:${source})(?!\\S)`;
+        const regex = new RegExp(bounded, flags);
+        compiled.push({
+          pattern: f.pattern,
+          type,
+          action,
+          replacement,
+          caseSensitive,
+          regex,
+        });
+      }
+    } catch (e) {
+      console.error("Invalid filter pattern:", f.pattern, e);
+      continue;
+    }
+  }
+
+  return compiled;
+}
+
+function wildcardReplace(replacement, captureCount, match, ...args) {
+  const captures = args.slice(0, captureCount);
+  let result = "";
+  let escaped = false;
+  let captureIndex = 0;
+  for (const ch of replacement) {
+    if (escaped) {
+      result += ch;
+      escaped = false;
+    } else if (ch === "\\") {
+      escaped = true;
+    } else if (ch === "*") {
+      if (captureIndex < captures.length) {
+        result += captures[captureIndex++];
+      } else {
+        result += "*";
+      }
+    } else {
+      result += ch;
+    }
+  }
+  return result;
+}
+
+function applyFilters(message, compiledFilters) {
+  if (!compiledFilters || compiledFilters.length === 0) {
+    return { hidden: false, message };
+  }
+
+  let current = message;
+  for (const filter of compiledFilters) {
+    if (filter.action === "hide") {
+      if (filter.regex.test(current)) {
+        return { hidden: true, message: current };
+      }
+    } else if (filter.action === "mask") {
+      current = current.replace(filter.regex, (match) =>
+        "*".repeat(match.length)
+      );
+    } else if (filter.action === "replace") {
+      if (filter.regexes) {
+        for (const entry of filter.regexes) {
+          current = current.replace(entry.regex, (match, ...args) =>
+            wildcardReplace(filter.replacement, entry.captureCount, match, ...args)
+          );
+        }
+      } else {
+        current = current.replace(filter.regex, () => filter.replacement);
+      }
+    }
+  }
+
+  return { hidden: false, message: current };
+}
+
 function addRandomQueryString(url) {
   return url + (url.indexOf("?") >= 0 ? "&" : "?") + "v=" + Date.now();
 }

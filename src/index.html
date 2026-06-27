@@ -209,6 +209,122 @@
         #custom-colors-field {
             display: flex;
         }
+
+        .filter-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .filter-row {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            font-size: 16px;
+            padding: 10px;
+            border-radius: var(--border-radius);
+            box-sizing: border-box;
+            background: rgba(255, 255, 255, 0.04);
+        }
+
+        .filter-options {
+            display: grid;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+            grid-template-columns: auto auto 42px 42px;
+        }
+
+        .filter-pattern,
+        .filter-replacement {
+            width: 100%;
+            text-align: left;
+            box-sizing: border-box;
+        }
+
+        .filter-type,
+        .filter-action {
+            width: auto;
+        }
+
+        .filter-case-toggle {
+            margin-left: auto;
+        }
+
+        .filter-case-toggle {
+            display: flex;
+            cursor: pointer;
+            height: 42px;
+            width: 42px;
+            min-width: 42px;
+            margin: 0;
+        }
+
+        .filter-case-toggle input {
+            display: none;
+        }
+
+        .filter-case-toggle span {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            border-radius: var(--border-radius);
+            background: #555;
+            color: #fff;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background 0.2s, color 0.2s;
+            user-select: none;
+        }
+
+        .filter-case-toggle input:checked+span {
+            background: var(--primary);
+            color: #111;
+        }
+
+        .filter-row .remove-filter {
+            height: 42px;
+            width: 42px;
+            min-width: 42px;
+            padding: 0;
+            font-size: 18px;
+            line-height: 1;
+            transition: none;
+            transform: none !important;
+            box-shadow: none !important;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .filter-row .remove-filter:hover {
+            transform: none !important;
+            box-shadow: none !important;
+        }
+
+        .filter-row .remove-filter::after {
+            display: none;
+        }
+
+        .add-filter-btn {
+            width: 100%;
+            margin-bottom: 8px;
+        }
+
+        .filter-help {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin: 0;
+        }
+
+        .filter-help code {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 2px 4px;
+            border-radius: 4px;
+        }
     </style>
 </head>
 
@@ -776,11 +892,20 @@
             <!-- Tab: Filtering -->
             <div class="tab-content" id="tab-filtering">
                 <div class="form-section">
-                    <div class="stacked-inputs">
-                        <div class="form-field">
-                            <label for="regex">Regex Blacklist</label>
-                            <input type="text" name="regex" placeholder="Regex Pattern to Block ex: ^[1-8]$" />
-                        </div>
+                    <div id="filter-list" class="filter-list">
+                        <!-- filter rows inserted here -->
+                    </div>
+                    <button type="button" id="add-filter" class="secondary-button add-filter-btn">
+                        <span class="button-icon">+</span>
+                        <span class="button-text">Add Filter</span>
+                    </button>
+                    <p class="filter-help">
+                        One filter per row. Wildcard filters support <code>*</code> (any characters within a word),
+                        <code>?</code> (one character), and <code>\</code> to escape them. Comma-separated patterns
+                        include any of the terms. In replacements, <code>*</code> inserts the text captured by the
+                        corresponding wildcard.
+                    </p>
+                    <div class="stacked-inputs" style="margin-top: 12px;">
                         <div class="form-field">
                             <label for="blocked_users">Blocked Users/Bots</label>
                             <input type="text" name="blocked_users"

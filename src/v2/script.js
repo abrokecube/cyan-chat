@@ -255,10 +255,16 @@ Chat = {
         : false,
     bots: ["streamelements", "streamlabs", "nightbot", "moobot", "fossabot"],
     nicknameColor: "cN" in $.QueryString ? $.QueryString.cN : false,
-    regex:
-      "regex" in $.QueryString
-        ? new RegExp(decodeURIComponent($.QueryString.regex))
-        : null,
+    filters: (() => {
+      if ("filters" in $.QueryString) {
+        const parsed = parseFiltersQuery($.QueryString.filters);
+        if (parsed) return parsed;
+      }
+      if ("regex" in $.QueryString) {
+        return legacyRegexFilter($.QueryString.regex);
+      }
+      return [];
+    })(),
     emoteScale:
       "emoteScale" in $.QueryString ? parseInt($.QueryString.emoteScale) : 1,
     readable:
@@ -1885,10 +1891,10 @@ Chat = {
         return;
       }
 
-      if (Chat.info.regex) {
-        if (doesStringMatchPattern(message, Chat.info)) {
-          return;
-        }
+      if (Chat.info.compiledFilters && Chat.info.compiledFilters.length) {
+        const filterResult = applyFilters(message, Chat.info.compiledFilters);
+        if (filterResult.hidden) return;
+        message = filterResult.message;
       }
       var $chatLine = $("<div></div>");
       $chatLine.addClass("chat_line");
@@ -3399,6 +3405,8 @@ Chat = {
     });
   },
 };
+
+Chat.info.compiledFilters = compileFilters(Chat.info.filters);
 
 $(document).ready(function () {
   Chat.connect(
