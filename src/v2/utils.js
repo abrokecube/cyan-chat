@@ -538,7 +538,8 @@ async function fixZeroWidthEmotes(messageId) {
             return img.complete
               ? Promise.resolve()
               : new Promise((resolve) => {
-                img.onload = img.onerror = resolve;
+                img.addEventListener('load', resolve);
+                img.addEventListener('error', resolve);
               });
           })
         );
@@ -575,6 +576,28 @@ async function fixZeroWidthEmotes(messageId) {
 
               // Set the width of the zero-width container to the widest emote
               firstContainer.style.width = `${maxWidth}px`;
+
+              // If the base emote has w! modifier: compute doubled dimensions from natural
+              // ratios here (avoids the onload-vs-microtask race for cached images) then
+              // scale ZW overlays to match the wider base.
+              const wideBase = currentSet.find(e => !e.classList.contains('zero-width') && e.dataset.wide === 'true');
+              if (wideBase) {
+                const containerH = firstContainer.offsetHeight;
+                if (containerH && wideBase.naturalWidth && wideBase.naturalHeight) {
+                  const baseW = Math.round(containerH * wideBase.naturalWidth / wideBase.naturalHeight);
+                  wideBase.style.width = (baseW * 2) + 'px';
+                  wideBase.style.height = containerH + 'px';
+                  wideBase.onload = null; // prevent late-firing onload from re-overwriting
+                  firstContainer.style.width = (baseW * 2) + 'px';
+                }
+                currentSet.filter(e => e.classList.contains('zero-width')).forEach(zw => {
+                  if (containerH && zw.naturalWidth && zw.naturalHeight) {
+                    const scaledW = Math.round(containerH * zw.naturalWidth / zw.naturalHeight);
+                    zw.style.width = (scaledW * 2) + 'px';
+                    zw.style.height = containerH + 'px';
+                  }
+                });
+              }
 
               firstContainer.classList.remove("staging");
               firstContainer.querySelectorAll("img.emote.staging").forEach((em) => {
@@ -618,6 +641,26 @@ async function fixZeroWidthEmotes(messageId) {
           });
 
           firstContainer.style.width = `${maxWidth}px`;
+
+          // Same wide-base handling for the final set
+          const wideBaseFinal = currentSet.find(e => !e.classList.contains('zero-width') && e.dataset.wide === 'true');
+          if (wideBaseFinal) {
+            const containerH = firstContainer.offsetHeight;
+            if (containerH && wideBaseFinal.naturalWidth && wideBaseFinal.naturalHeight) {
+              const baseW = Math.round(containerH * wideBaseFinal.naturalWidth / wideBaseFinal.naturalHeight);
+              wideBaseFinal.style.width = (baseW * 2) + 'px';
+              wideBaseFinal.style.height = containerH + 'px';
+              wideBaseFinal.onload = null;
+              firstContainer.style.width = (baseW * 2) + 'px';
+            }
+            currentSet.filter(e => e.classList.contains('zero-width')).forEach(zw => {
+              if (containerH && zw.naturalWidth && zw.naturalHeight) {
+                const scaledW = Math.round(containerH * zw.naturalWidth / zw.naturalHeight);
+                zw.style.width = (scaledW * 2) + 'px';
+                zw.style.height = containerH + 'px';
+              }
+            });
+          }
 
           firstContainer.classList.remove("staging");
           firstContainer.querySelectorAll("img.emote.staging").forEach((em) => {
