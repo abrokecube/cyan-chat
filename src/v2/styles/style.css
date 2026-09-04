@@ -168,6 +168,17 @@ body {
   max-width: 6.6em;
 }
 
+/* Twitch GIF messages */
+.gif-message {
+  text-align: center;
+}
+
+.message .gif {
+  border-radius: .4rem;
+  display: block;
+  width: auto;
+}
+
 /* Pronoun styling for default theme */
 .pronoun {
   display: inline-block;

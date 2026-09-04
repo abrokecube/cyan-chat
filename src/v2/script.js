@@ -2546,6 +2546,28 @@ Chat = {
       // Finalize the message HTML
       $message.html(message);
 
+      // Twitch GIFs: the gifs tag is "<start>-<end>|<gifID>|<gifURL>,...".
+      // GIF messages cannot contain text, so the message body is only the GIF
+      // description. Replace the entire message with the GIF image(s) and use
+      // the full URL unmodified, as required by Twitch.
+      if (typeof info.gifs === "string" && info.gifs.length > 0) {
+        var gifHtml = "";
+        info.gifs.split(",").forEach(function (gifData) {
+          try {
+            var gifParts = gifData.split("|");
+            if (gifParts.length < 3) return;
+            var gifUrl = gifParts.slice(2).join("|");
+            gifHtml += '<img class="gif" src="' + gifUrl + '" alt="GIF"/>';
+          } catch (gifError) {
+            console.error("[Gif Debug] Error processing gif entry:", gifError, "Data:", gifData);
+          }
+        });
+        if (gifHtml !== "") {
+          $message.addClass("gif-message");
+          $message.html(gifHtml);
+        }
+      }
+
       // URL highlighting / linkification
       if (Chat.info.streamerChat || Chat.info.linkUrls) {
         linkifyUrls($message, Chat.info.streamerChat);
@@ -3738,6 +3760,14 @@ function generateTestMessages(count) {
           "user-id": userId,
           "user-type": ""
         };
+
+        // Sample GIF message using the gifs tag format:
+        // "<start>-<end>|<gifID>|<gifURL>" (URL used verbatim)
+        if (Math.random() < 0.1) {
+          tags["gifs"] =
+            "0-33|joSNxeswxuc74Juo8X|https://media4.giphy.com/media/joSNxeswxuc74Juo8X/giphy.gif?cid=095d7a5dzizsiwgabonagkmigggv8v1spfai91ac3x0dsiy0&ep=v1_gifs_trending&rid=giphy.gif&ct=g";
+          textMessage = "[Y A Y Yes GIF by Djemilah Birnie]";
+        }
 
         // Initialize empty paint array for every user to prevent undefined errors
         if (!Chat.info.seventvPaints[username]) {

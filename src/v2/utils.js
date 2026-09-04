@@ -58,10 +58,10 @@ function removeEmoteScaleCSS() {
 
 // Base emote dimensions for each size preset. Used to compute custom scales.
 const EMOTE_BASE_SIZES = {
-  tiny:   { emote: [53, 18], emoji: 15 },
-  small:  { emote: [75, 25], emoji: 22 },
+  tiny: { emote: [53, 18], emoji: 15 },
+  small: { emote: [75, 25], emoji: 22 },
   medium: { emote: [128, 42], emoji: 39 },
-  large:  { emote: [180, 60], emoji: 55 }
+  large: { emote: [180, 60], emoji: 55 }
 };
 
 function applyEmoteScale(sizeName, scale) {
@@ -85,12 +85,14 @@ function applyEmoteScale(sizeName, scale) {
   var maxH = Math.round(base.emote[1] * s * 10) / 10;
   var maxW = Math.round(base.emote[0] * s * 10) / 10;
   var emojiH = Math.round(base.emoji * s * 10) / 10;
+  var gifH = Math.round(base.emote[1] * 5 * s * 10) / 10;
   var margin = Math.max(0, (maxH - base.emote[1]) * 0.4375);
   margin = Math.round(margin * 10) / 10;
 
   var css = "#chat_container .emote { max-height: " + maxH + "px; max-width: " + maxW + "px; }\n" +
-            "#chat_container .emoji { height: " + emojiH + "px; }\n" +
-            ".zero-width_container { margin-bottom: " + margin + "px; margin-top: " + margin + "px; }";
+    "#chat_container .emoji { height: " + emojiH + "px; }\n" +
+    "#chat_container .gif { max-height: " + gifH + "px; }\n" +
+    ".zero-width_container { margin-bottom: " + margin + "px; margin-top: " + margin + "px; }";
 
   var style = document.getElementById("chat_emote_scale_dynamic");
   if (!style) {
