@@ -3,6 +3,10 @@
   max-width: 157px;
 }
 
+#chat_container .emoji {
+  height: 45px;
+}
+
 .zero-width_container {
   margin-bottom: 11px;
   margin-top: 11px;

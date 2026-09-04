@@ -53,6 +53,52 @@ function replaceCSS(type, name) {
 // Remove all emoteScale CSS links regardless of which size prefix is active.
 function removeEmoteScaleCSS() {
   sizes.forEach(function (s) { removeCSS("emoteScale_" + s); });
+  $("#chat_emote_scale_dynamic").remove();
+}
+
+// Base emote dimensions for each size preset. Used to compute custom scales.
+const EMOTE_BASE_SIZES = {
+  tiny:   { emote: [53, 18], emoji: 15 },
+  small:  { emote: [75, 25], emoji: 22 },
+  medium: { emote: [128, 42], emoji: 39 },
+  large:  { emote: [180, 60], emoji: 55 }
+};
+
+function applyEmoteScale(sizeName, scale) {
+  removeEmoteScaleCSS();
+
+  var s = parseFloat(scale) || 1;
+  if (s < 0.1) s = 0.1;
+  if (Math.abs(s - 1) < 0.001) return;
+
+  // Preserve the legacy static CSS files for the original 2x and 3x presets
+  // so they look exactly the same as before.
+  var intScale = Math.round(s);
+  if (Math.abs(s - intScale) < 0.001 && intScale >= 2 && intScale <= 3) {
+    appendCSS("emoteScale_" + sizeName, intScale);
+    return;
+  }
+
+  var base = EMOTE_BASE_SIZES[sizeName];
+  if (!base) return;
+
+  var maxH = Math.round(base.emote[1] * s * 10) / 10;
+  var maxW = Math.round(base.emote[0] * s * 10) / 10;
+  var emojiH = Math.round(base.emoji * s * 10) / 10;
+  var margin = Math.max(0, (maxH - base.emote[1]) * 0.4375);
+  margin = Math.round(margin * 10) / 10;
+
+  var css = "#chat_container .emote { max-height: " + maxH + "px; max-width: " + maxW + "px; }\n" +
+            "#chat_container .emoji { height: " + emojiH + "px; }\n" +
+            ".zero-width_container { margin-bottom: " + margin + "px; margin-top: " + margin + "px; }";
+
+  var style = document.getElementById("chat_emote_scale_dynamic");
+  if (!style) {
+    style = document.createElement("style");
+    style.id = "chat_emote_scale_dynamic";
+    document.head.appendChild(style);
+  }
+  style.textContent = css;
 }
 
 /**

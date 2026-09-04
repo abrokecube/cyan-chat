@@ -266,7 +266,7 @@ Chat = {
       return [];
     })(),
     emoteScale:
-      "emoteScale" in $.QueryString ? parseInt($.QueryString.emoteScale) : 1,
+      "emoteScale" in $.QueryString ? parseFloat($.QueryString.emoteScale) : 1,
     readable:
       "readable" in $.QueryString
         ? $.QueryString.readable.toLowerCase() === "true"
@@ -1152,12 +1152,12 @@ Chat = {
         Chat.info.seven_scale = 48 / 14;
       }
 
-      let emoteScale = 1;
-      if (Chat.info.emoteScale > 1) {
-        emoteScale = Chat.info.emoteScale;
+      let emoteScale = parseFloat(Chat.info.emoteScale) || 1;
+      if (emoteScale < 0.5) {
+        emoteScale = 0.5;
       }
-      if (emoteScale > 3) {
-        emoteScale = 3;
+      if (emoteScale > 5) {
+        emoteScale = 5;
       }
 
       if (Chat.info.center) {
@@ -1197,9 +1197,7 @@ Chat = {
       }
 
       appendCSS("size", size);
-      if (emoteScale > 1) {
-        appendCSS("emoteScale_" + size, emoteScale);
-      }
+      applyEmoteScale(size, emoteScale);
 
       if (Chat.info.height) {
         if (Chat.info.height > 4) Chat.info.height = 4
