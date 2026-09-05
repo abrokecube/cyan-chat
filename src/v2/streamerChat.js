@@ -460,6 +460,13 @@ var StreamerChat = (function () {
                 $("#ds_custom_font_row").hide();
             }
         });
+        // Sync emote scale slider and number input
+        $("#ds_emote_scale").on("input", function () {
+            $("#ds_emote_scale_num").val($(this).val());
+        });
+        $("#ds_emote_scale_num").on("input", function () {
+            $("#ds_emote_scale").val($(this).val());
+        });
         // Close unified modal button
         $("#mod_settings_close_btn").on("click", function () { $("#mod_settings_overlay").hide(); });
         $("#mod_settings_save_btn").on("click", saveModSettings);
@@ -1055,11 +1062,7 @@ var StreamerChat = (function () {
         }
 
         // Emote scale
-        removeEmoteScaleCSS();
-        var emoteScaleVal = parseInt(settings.emoteScale) || 1;
-        if (emoteScaleVal > 1 && sizeName) {
-            appendCSS("emoteScale_" + sizeName, emoteScaleVal);
-        }
+        applyEmoteScale(sizeName, settings.emoteScale);
 
         // Font weights
         root.style.setProperty("--sc-msg-weight", String(settings.msgWeight != null ? settings.msgWeight : DEFAULT_DISPLAY.msgWeight));
@@ -1113,7 +1116,9 @@ var StreamerChat = (function () {
         $("#ds_scale").val(String(settings.scale != null ? settings.scale : DEFAULT_DISPLAY.scale));
 
         // Emotes
-        $("#ds_emote_scale").val(String(settings.emoteScale != null ? settings.emoteScale : DEFAULT_DISPLAY.emoteScale));
+        var emoteScaleVal = settings.emoteScale != null ? settings.emoteScale : DEFAULT_DISPLAY.emoteScale;
+        $("#ds_emote_scale").val(String(emoteScaleVal));
+        $("#ds_emote_scale_num").val(String(emoteScaleVal));
 
         // Platform indicator
         var piMode = settings.platformIndicator || "none";
@@ -1149,7 +1154,7 @@ var StreamerChat = (function () {
             msgWeight: parseInt($("#ds_msg_weight").val()) || 400,
             userWeight: parseInt($("#ds_user_weight").val()) || 700,
             scale: parseFloat($("#ds_scale").val()) || 1,
-            emoteScale: parseInt($("#ds_emote_scale").val()) || 1,
+            emoteScale: parseFloat($("#ds_emote_scale").val()) || 1,
             platformIndicator: $("#ds_pi_mode").val() || "none",
             piStyle: $("#ds_pi_style").val() || "solid",
             piSides: $("#ds_pi_sides").val() || "left",

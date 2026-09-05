@@ -3,6 +3,14 @@
     max-width: 540px;
 }
 
+#chat_container .gif {
+    max-height: 900px;
+}
+
+#chat_container .emoji {
+    height: 165px;
+}
+
 .zero-width_container {
     margin-bottom: 28px;
     margin-top: 28px;

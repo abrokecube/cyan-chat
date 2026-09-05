@@ -168,6 +168,17 @@ body {
   max-width: 6.6em;
 }
 
+/* Twitch GIF messages */
+.gif-message {
+  text-align: center;
+}
+
+.message .gif {
+  border-radius: .4rem;
+  display: block;
+  width: auto;
+}
+
 /* Pronoun styling for default theme */
 .pronoun {
   display: inline-block;
@@ -226,6 +237,33 @@ body {
 
 .pronoun.faefaer {
   background: linear-gradient(135deg, #667eea 0%, #9f5edf 100%);
+}
+
+/* Emote modifier animations */
+@keyframes emote-modifier-party {
+  0%   { filter: hue-rotate(0deg); }
+  100% { filter: hue-rotate(360deg); }
+}
+
+@keyframes emote-modifier-shake {
+  0%   { transform: translate(0, 0); }
+  20%  { transform: translate(-2px, 1px); }
+  40%  { transform: translate(2px, -1px); }
+  60%  { transform: translate(-2px, 2px); }
+  80%  { transform: translate(2px, -2px); }
+  100% { transform: translate(0, 0); }
+}
+
+.emote-mod-party {
+  animation: emote-modifier-party 1s linear infinite;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.emote-mod-shake {
+  animation: emote-modifier-shake 0.3s linear infinite;
+  display: inline-block;
+  vertical-align: middle;
 }
 
 .pronoun.vever {

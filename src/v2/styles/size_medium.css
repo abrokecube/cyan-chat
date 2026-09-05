@@ -40,6 +40,10 @@
     margin-left: -3.5px; */
 }
 
+.gif {
+  max-height: 210px;
+}
+
 .upscale {
   height: 42px;
 }

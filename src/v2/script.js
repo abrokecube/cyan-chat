@@ -40,6 +40,142 @@ var YOUTUBE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" f
 var TWITCH_BADGE_SRC = "data:image/svg+xml," + encodeURIComponent(TWITCH_SVG);
 var YOUTUBE_BADGE_SRC = "data:image/svg+xml," + encodeURIComponent(YOUTUBE_SVG);
 
+// ── BTTV / FFZ emote-modifier support ────────────────────────────────────────
+const BTTV_MODIFIER_SET = new Set(['w!', 'c!', 'z!', 'h!', 'v!', 'l!', 'r!', 'p!', 's!']);
+const FFZ_MODIFIER_SET  = new Set(['ffzX', 'ffzY', 'ffzCursed', 'ffzW']);
+
+/**
+ * Inject the combined visual effects of `modifiers` into an emote `<img>` HTML string.
+ * Modifiers are processed left-to-right; for conflicting effects the last one wins.
+ * The expected allMods order (from callers) is: [farthest-FFZ … closest-FFZ, farthest-BTTV … closest-BTTV]
+ * so that BTTV modifiers (especially the one immediately before the emote) take final priority.
+ *
+ * @param {string} imgHtml  The emote img tag HTML string.
+ * @param {string[]} modifiers  Array of modifier token strings.
+ * @returns {string} Modified img HTML string.
+ */
+function applyEmoteModifiers(imgHtml, modifiers) {
+  if (!imgHtml.startsWith('<img ')) {
+    console.warn('applyEmoteModifiers: expected <img> tag, got:', imgHtml);
+    return imgHtml;
+  }
+
+  let flipX = false;
+  let flipY = false;
+  let rotDeg = 0;
+  // For conflicting effects (filter vs. animation class) the last write wins.
+  // Track which type last "claimed" the conflict slot.
+  let filterStr = null;   // e.g. 'grayscale(1) brightness(0.7) contrast(2.5)'
+  let animClass = null;   // 'emote-mod-party' | 'emote-mod-shake'
+  let lastConflictType = null; // 'filter' | 'anim'
+  let applyWide = false;
+
+  for (const mod of modifiers) {
+    switch (mod) {
+      case 'h!':
+      case 'ffzX':
+        flipX = !flipX;
+        break;
+      case 'v!':
+      case 'ffzY':
+        flipY = !flipY;
+        break;
+      case 'l!':
+        rotDeg -= 90;
+        break;
+      case 'r!':
+        rotDeg += 90;
+        break;
+      case 'c!':
+      case 'ffzCursed':
+        filterStr = 'grayscale(1) brightness(0.7) contrast(2.5)';
+        lastConflictType = 'filter';
+        animClass = null;
+        break;
+      case 'p!':
+        animClass = 'emote-mod-party';
+        lastConflictType = 'anim';
+        filterStr = null;
+        break;
+      case 's!':
+        animClass = 'emote-mod-shake';
+        lastConflictType = 'anim';
+        filterStr = null;
+        break;
+      case 'w!':
+      case 'ffzW':
+        applyWide = true;
+        break;
+      case 'z!':
+        // Consume token only, no visual effect.
+        break;
+    }
+  }
+
+  // Build transform string.
+  const transforms = [];
+  if (flipX) transforms.push('scaleX(-1)');
+  if (flipY) transforms.push('scaleY(-1)');
+  // Normalise rotation to [0,360) for compactness; 0 means no rotation.
+  const netRot = ((rotDeg % 360) + 360) % 360;
+  if (netRot !== 0) transforms.push(`rotate(${netRot}deg)`);
+
+  // Inject attributes into the img tag.
+  let result = imgHtml;
+
+  // style attribute — transform and/or filter
+  const styleParts = [];
+  if (transforms.length > 0) styleParts.push(`transform: ${transforms.join(' ')}`);
+  if (filterStr) styleParts.push(`filter: ${filterStr}`);
+  // (wide: no inline style placeholder needed; sizing happens in the onload)
+
+  if (styleParts.length > 0) {
+    // Merge with any existing style attribute or add a new one.
+    if (/\bstyle="/.test(result)) {
+      result = result.replace(/\bstyle="([^"]*)"/, (m, existing) =>
+        `style="${existing}; ${styleParts.join('; ')}"`
+      );
+    } else {
+      result = result.replace('<img ', `<img style="${styleParts.join('; ')}" `);
+    }
+  }
+
+  // class attribute — animation classes
+  if (animClass) {
+    if (/\bclass="/.test(result)) {
+      result = result.replace(/\bclass="([^"]*)"/, (m, existing) =>
+        `class="${existing} ${animClass}"`
+      );
+    } else {
+      result = result.replace('<img ', `<img class="${animClass}" `);
+    }
+  }
+
+  // Wide emote: mark with data-wide and attach an onload that doubles the rendered pixel width.
+  // data-wide lets fixZeroWidthEmotes detect and scale ZW overlays when the base is widened.
+  // The onload handler uses the .zero-width_container height as the reference for ZW emotes
+  // (they are position:absolute so offsetHeight is unreliable without the container).
+  if (applyWide) {
+    result = result.replace('<img ', '<img data-wide="true" ');
+    const onload = `this.onload=null;` +
+      `var c=this.closest('.zero-width_container');` +
+      `var h=(c?c.offsetHeight:0)||this.offsetHeight||this.naturalHeight;` +
+      `var w=Math.round(h*(this.naturalWidth/this.naturalHeight));` +
+      `this.style.width=(w*2)+'px';` +
+      `this.style.height=h+'px';`;
+    if (/\bonload="/.test(result)) {
+      result = result.replace(/\bonload="([^"]*)"/, (m, existing) =>
+        `onload="${existing} ${onload}"`
+      );
+    } else {
+      result = result.replace('<img ', `<img onload="${onload}" `);
+    }
+  }
+
+  return result;
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 Chat = {
   info: {
     channel: null,
@@ -119,12 +255,18 @@ Chat = {
         : false,
     bots: ["streamelements", "streamlabs", "nightbot", "moobot", "fossabot"],
     nicknameColor: "cN" in $.QueryString ? $.QueryString.cN : false,
-    regex:
-      "regex" in $.QueryString
-        ? new RegExp(decodeURIComponent($.QueryString.regex))
-        : null,
+    filters: (() => {
+      if ("filters" in $.QueryString) {
+        const parsed = parseFiltersQuery($.QueryString.filters);
+        if (parsed) return parsed;
+      }
+      if ("regex" in $.QueryString) {
+        return legacyRegexFilter($.QueryString.regex);
+      }
+      return [];
+    })(),
     emoteScale:
-      "emoteScale" in $.QueryString ? parseInt($.QueryString.emoteScale) : 1,
+      "emoteScale" in $.QueryString ? parseFloat($.QueryString.emoteScale) : 1,
     readable:
       "readable" in $.QueryString
         ? $.QueryString.readable.toLowerCase() === "true"
@@ -1094,12 +1236,12 @@ Chat = {
         Chat.info.seven_scale = 48 / 14;
       }
 
-      let emoteScale = 1;
-      if (Chat.info.emoteScale > 1) {
-        emoteScale = Chat.info.emoteScale;
+      let emoteScale = parseFloat(Chat.info.emoteScale) || 1;
+      if (emoteScale < 0.5) {
+        emoteScale = 0.5;
       }
-      if (emoteScale > 3) {
-        emoteScale = 3;
+      if (emoteScale > 5) {
+        emoteScale = 5;
       }
 
       if (Chat.info.center) {
@@ -1139,9 +1281,7 @@ Chat = {
       }
 
       appendCSS("size", size);
-      if (emoteScale > 1) {
-        appendCSS("emoteScale_" + size, emoteScale);
-      }
+      applyEmoteScale(size, emoteScale);
 
       if (Chat.info.height) {
         if (Chat.info.height > 4) Chat.info.height = 4
@@ -1743,10 +1883,10 @@ Chat = {
         return;
       }
 
-      if (Chat.info.regex) {
-        if (doesStringMatchPattern(message, Chat.info)) {
-          return;
-        }
+      if (Chat.info.compiledFilters && Chat.info.compiledFilters.length) {
+        const filterResult = applyFilters(message, Chat.info.compiledFilters);
+        if (filterResult.hidden) return;
+        message = filterResult.message;
       }
       var $chatLine = $("<div></div>");
       $chatLine.addClass("chat_line");
@@ -2078,13 +2218,24 @@ Chat = {
 
       message = escapeHtml(message);
       const words = message.split(/\s+/);
+      const twitchEmotesInMap = new Set();
       const processedWords = words.map(word => {
         let replacedWord = word;
         let isReplaced = false;
 
+        // ── Modifier detection (MUST be first: BTTV/FFZ register these tokens
+        //    as real emotes, so the lookup below would otherwise eat them) ──
+        if (BTTV_MODIFIER_SET.has(word)) {
+          return { word, isReplaced: false, isBttvModifier: true, modifierType: word };
+        }
+        if (FFZ_MODIFIER_SET.has(word)) {
+          return { word, isReplaced: false, isFfzModifier: true, modifierType: word };
+        }
+
         // Prioritize Twitch emotes: skip third-party lookup if this word is a Twitch emote
         if (replacements[word]) {
-          return { word: replacedWord, isReplaced: false };
+          twitchEmotesInMap.add(word);
+          return { word: replacements[word], isReplaced: true };
         }
 
         // Check personal emotes if not YouTube
@@ -2127,10 +2278,44 @@ Chat = {
         return { word: replacedWord, isReplaced };
       });
 
-      message = processedWords.reduce((acc, curr, index) => {
+      // ── Modifier assignment: backwards scan for BTTV (before emote),
+      //    forwards scan for FFZ (after emote). ──────────────────────────────
+      for (let i = 0; i < processedWords.length; i++) {
+        const entry = processedWords[i];
+        if (!entry.isReplaced) continue;
+
+        // Backwards scan: consecutive BTTV modifiers immediately before this emote.
+        const bttvMods = [];
+        let k = i - 1;
+        while (k >= 0 && processedWords[k].isBttvModifier && !processedWords[k].consumed) {
+          bttvMods.unshift(processedWords[k].modifierType);
+          processedWords[k].consumed = true;
+          k--;
+        }
+
+        // Forwards scan: consecutive FFZ modifiers immediately after this emote.
+        const ffzMods = [];
+        let j = i + 1;
+        while (j < processedWords.length && processedWords[j].isFfzModifier && !processedWords[j].consumed) {
+          ffzMods.push(processedWords[j].modifierType);
+          processedWords[j].consumed = true;
+          j++;
+        }
+
+        // allMods order: [farthest-FFZ … closest-FFZ, farthest-BTTV … closest-BTTV]
+        // → in applyEmoteModifiers "last-one-wins", BTTV (closest to emote) takes priority.
+        const allMods = [...[...ffzMods].reverse(), ...bttvMods];
+        if (allMods.length > 0) {
+          entry.word = applyEmoteModifiers(entry.word, allMods);
+        }
+      }
+      const filteredWords = processedWords.filter(e => !e.consumed);
+      // ─────────────────────────────────────────────────────────────────────
+
+      message = filteredWords.reduce((acc, curr, index) => {
         if (index === 0) return curr.word;
 
-        if (curr.isReplaced && processedWords[index - 1].isReplaced) {
+        if (curr.isReplaced && filteredWords[index - 1].isReplaced) {
           return acc + curr.word;
         } else {
           return acc + ' ' + curr.word;
@@ -2178,6 +2363,7 @@ Chat = {
       });
 
       replacementKeys.forEach((replacementKey) => {
+        if (twitchEmotesInMap.has(replacementKey)) return;
         var regex = new RegExp(
           "(" + escapeRegExp(replacementKey) + ")",
           "g"
@@ -2354,6 +2540,28 @@ Chat = {
 
       // Finalize the message HTML
       $message.html(message);
+
+      // Twitch GIFs: the gifs tag is "<start>-<end>|<gifID>|<gifURL>,...".
+      // GIF messages cannot contain text, so the message body is only the GIF
+      // description. Replace the entire message with the GIF image(s) and use
+      // the full URL unmodified, as required by Twitch.
+      if (typeof info.gifs === "string" && info.gifs.length > 0) {
+        var gifHtml = "";
+        info.gifs.split(",").forEach(function (gifData) {
+          try {
+            var gifParts = gifData.split("|");
+            if (gifParts.length < 3) return;
+            var gifUrl = gifParts.slice(2).join("|");
+            gifHtml += '<img class="gif" src="' + gifUrl + '" alt="GIF"/>';
+          } catch (gifError) {
+            console.error("[Gif Debug] Error processing gif entry:", gifError, "Data:", gifData);
+          }
+        });
+        if (gifHtml !== "") {
+          $message.addClass("gif-message");
+          $message.html(gifHtml);
+        }
+      }
 
       // URL highlighting / linkification
       if (Chat.info.streamerChat || Chat.info.linkUrls) {
@@ -3213,6 +3421,8 @@ Chat = {
   },
 };
 
+Chat.info.compiledFilters = compileFilters(Chat.info.filters);
+
 $(document).ready(function () {
   Chat.connect(
     $.QueryString.channel ? $.QueryString.channel.toLowerCase() : "johnnycyan"
@@ -3545,6 +3755,14 @@ function generateTestMessages(count) {
           "user-id": userId,
           "user-type": ""
         };
+
+        // Sample GIF message using the gifs tag format:
+        // "<start>-<end>|<gifID>|<gifURL>" (URL used verbatim)
+        if (Math.random() < 0.1) {
+          tags["gifs"] =
+            "0-33|joSNxeswxuc74Juo8X|https://media4.giphy.com/media/joSNxeswxuc74Juo8X/giphy.gif?cid=095d7a5dzizsiwgabonagkmigggv8v1spfai91ac3x0dsiy0&ep=v1_gifs_trending&rid=giphy.gif&ct=g";
+          textMessage = "[Y A Y Yes GIF by Djemilah Birnie]";
+        }
 
         // Initialize empty paint array for every user to prevent undefined errors
         if (!Chat.info.seventvPaints[username]) {

@@ -53,6 +53,54 @@ function replaceCSS(type, name) {
 // Remove all emoteScale CSS links regardless of which size prefix is active.
 function removeEmoteScaleCSS() {
   sizes.forEach(function (s) { removeCSS("emoteScale_" + s); });
+  $("#chat_emote_scale_dynamic").remove();
+}
+
+// Base emote dimensions for each size preset. Used to compute custom scales.
+const EMOTE_BASE_SIZES = {
+  tiny: { emote: [53, 18], emoji: 15 },
+  small: { emote: [75, 25], emoji: 22 },
+  medium: { emote: [128, 42], emoji: 39 },
+  large: { emote: [180, 60], emoji: 55 }
+};
+
+function applyEmoteScale(sizeName, scale) {
+  removeEmoteScaleCSS();
+
+  var s = parseFloat(scale) || 1;
+  if (s < 0.1) s = 0.1;
+  if (Math.abs(s - 1) < 0.001) return;
+
+  // Preserve the legacy static CSS files for the original 2x and 3x presets
+  // so they look exactly the same as before.
+  var intScale = Math.round(s);
+  if (Math.abs(s - intScale) < 0.001 && intScale >= 2 && intScale <= 3) {
+    appendCSS("emoteScale_" + sizeName, intScale);
+    return;
+  }
+
+  var base = EMOTE_BASE_SIZES[sizeName];
+  if (!base) return;
+
+  var maxH = Math.round(base.emote[1] * s * 10) / 10;
+  var maxW = Math.round(base.emote[0] * s * 10) / 10;
+  var emojiH = Math.round(base.emoji * s * 10) / 10;
+  var gifH = Math.round(base.emote[1] * 5 * s * 10) / 10;
+  var margin = Math.max(0, (maxH - base.emote[1]) * 0.4375);
+  margin = Math.round(margin * 10) / 10;
+
+  var css = "#chat_container .emote { max-height: " + maxH + "px; max-width: " + maxW + "px; }\n" +
+    "#chat_container .emoji { height: " + emojiH + "px; }\n" +
+    "#chat_container .gif { max-height: " + gifH + "px; }\n" +
+    ".zero-width_container { margin-bottom: " + margin + "px; margin-top: " + margin + "px; }";
+
+  var style = document.getElementById("chat_emote_scale_dynamic");
+  if (!style) {
+    style = document.createElement("style");
+    style.id = "chat_emote_scale_dynamic";
+    document.head.appendChild(style);
+  }
+  style.textContent = css;
 }
 
 /**
@@ -301,6 +349,202 @@ function doesStringMatchPattern(stringToTest, info) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Message filter engine
+// ---------------------------------------------------------------------------
+
+function parseFiltersQuery(raw) {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch (e) {
+    console.error("Failed to parse filters query param:", e);
+    return null;
+  }
+}
+
+function legacyRegexFilter(raw) {
+  if (!raw) return null;
+  return [
+    {
+      pattern: raw,
+      type: "regex",
+      action: "hide",
+      replacement: "",
+      caseSensitive: true,
+    },
+  ];
+}
+
+function splitPatternTerms(pattern) {
+  // Split on commas not preceded by a backslash. Commas escaped with \ stay
+  // literal and are handled by the wildcard parser.
+  return pattern
+    .split(/(?<!\\),/)
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0);
+}
+
+function wildcardTermToRegex(term, captureWildcards) {
+  let regex = "";
+  let captureCount = 0;
+  let escaped = false;
+  for (const ch of term) {
+    if (escaped) {
+      // The escape consumed the backslash; emit the escaped character literally.
+      regex += escapeRegExp(ch);
+      escaped = false;
+    } else if (ch === "\\") {
+      escaped = true;
+    } else if (ch === "*") {
+      if (captureWildcards) {
+        regex += "(\\S*)";
+        captureCount++;
+      } else {
+        regex += "(?:\\S*)";
+      }
+    } else if (ch === "?") {
+      regex += "\\S";
+    } else {
+      regex += escapeRegExp(ch);
+    }
+  }
+  return { source: regex, captureCount };
+}
+
+function compileFilters(filters) {
+  if (!Array.isArray(filters)) return [];
+  const compiled = [];
+
+  for (const f of filters) {
+    if (!f || typeof f.pattern !== "string" || !f.pattern.trim()) continue;
+
+    const type = f.type === "regex" ? "regex" : "wildcard";
+    const action = ["hide", "mask", "replace"].includes(f.action)
+      ? f.action
+      : "hide";
+    const replacement =
+      typeof f.replacement === "string" ? f.replacement : "";
+    const caseSensitive = !!f.caseSensitive;
+
+    const terms = splitPatternTerms(f.pattern);
+    if (terms.length === 0) continue;
+
+    const flags =
+      (caseSensitive ? "" : "i") + (action !== "hide" ? "g" : "");
+
+    try {
+      if (type === "regex") {
+        const source = terms.map((t) => `(?:${t})`).join("|");
+        const regex = new RegExp(source, flags);
+        compiled.push({
+          pattern: f.pattern,
+          type,
+          action,
+          replacement,
+          caseSensitive,
+          regex,
+        });
+      } else if (action === "replace") {
+        // Wildcard replace needs each term as its own regex so the captured
+        // wildcard segments line up with the replacement * placeholders.
+        const regexes = terms.map((term) => {
+          const converted = wildcardTermToRegex(term, true);
+          const bounded = `(?<!\\S)(?:${converted.source})(?!\\S)`;
+          return {
+            regex: new RegExp(bounded, flags),
+            captureCount: converted.captureCount,
+          };
+        });
+        compiled.push({
+          pattern: f.pattern,
+          type,
+          action,
+          replacement,
+          caseSensitive,
+          regexes,
+        });
+      } else {
+        const source = terms
+          .map((term) => `(?:${wildcardTermToRegex(term, false).source})`)
+          .join("|");
+        // Match only within a single whitespace-delimited word.
+        const bounded = `(?<!\\S)(?:${source})(?!\\S)`;
+        const regex = new RegExp(bounded, flags);
+        compiled.push({
+          pattern: f.pattern,
+          type,
+          action,
+          replacement,
+          caseSensitive,
+          regex,
+        });
+      }
+    } catch (e) {
+      console.error("Invalid filter pattern:", f.pattern, e);
+      continue;
+    }
+  }
+
+  return compiled;
+}
+
+function wildcardReplace(replacement, captureCount, match, ...args) {
+  const captures = args.slice(0, captureCount);
+  let result = "";
+  let escaped = false;
+  let captureIndex = 0;
+  for (const ch of replacement) {
+    if (escaped) {
+      result += ch;
+      escaped = false;
+    } else if (ch === "\\") {
+      escaped = true;
+    } else if (ch === "*") {
+      if (captureIndex < captures.length) {
+        result += captures[captureIndex++];
+      } else {
+        result += "*";
+      }
+    } else {
+      result += ch;
+    }
+  }
+  return result;
+}
+
+function applyFilters(message, compiledFilters) {
+  if (!compiledFilters || compiledFilters.length === 0) {
+    return { hidden: false, message };
+  }
+
+  let current = message;
+  for (const filter of compiledFilters) {
+    if (filter.action === "hide") {
+      if (filter.regex.test(current)) {
+        return { hidden: true, message: current };
+      }
+    } else if (filter.action === "mask") {
+      current = current.replace(filter.regex, (match) =>
+        "*".repeat(match.length)
+      );
+    } else if (filter.action === "replace") {
+      if (filter.regexes) {
+        for (const entry of filter.regexes) {
+          current = current.replace(entry.regex, (match, ...args) =>
+            wildcardReplace(filter.replacement, entry.captureCount, match, ...args)
+          );
+        }
+      } else {
+        current = current.replace(filter.regex, () => filter.replacement);
+      }
+    }
+  }
+
+  return { hidden: false, message: current };
+}
+
 function addRandomQueryString(url) {
   return url + (url.indexOf("?") >= 0 ? "&" : "?") + "v=" + Date.now();
 }
@@ -538,7 +782,8 @@ async function fixZeroWidthEmotes(messageId) {
             return img.complete
               ? Promise.resolve()
               : new Promise((resolve) => {
-                img.onload = img.onerror = resolve;
+                img.addEventListener('load', resolve);
+                img.addEventListener('error', resolve);
               });
           })
         );
@@ -575,6 +820,28 @@ async function fixZeroWidthEmotes(messageId) {
 
               // Set the width of the zero-width container to the widest emote
               firstContainer.style.width = `${maxWidth}px`;
+
+              // If the base emote has w! modifier: compute doubled dimensions from natural
+              // ratios here (avoids the onload-vs-microtask race for cached images) then
+              // scale ZW overlays to match the wider base.
+              const wideBase = currentSet.find(e => !e.classList.contains('zero-width') && e.dataset.wide === 'true');
+              if (wideBase) {
+                const containerH = firstContainer.offsetHeight;
+                if (containerH && wideBase.naturalWidth && wideBase.naturalHeight) {
+                  const baseW = Math.round(containerH * wideBase.naturalWidth / wideBase.naturalHeight);
+                  wideBase.style.width = (baseW * 2) + 'px';
+                  wideBase.style.height = containerH + 'px';
+                  wideBase.onload = null; // prevent late-firing onload from re-overwriting
+                  firstContainer.style.width = (baseW * 2) + 'px';
+                }
+                currentSet.filter(e => e.classList.contains('zero-width')).forEach(zw => {
+                  if (containerH && zw.naturalWidth && zw.naturalHeight) {
+                    const scaledW = Math.round(containerH * zw.naturalWidth / zw.naturalHeight);
+                    zw.style.width = (scaledW * 2) + 'px';
+                    zw.style.height = containerH + 'px';
+                  }
+                });
+              }
 
               firstContainer.classList.remove("staging");
               firstContainer.querySelectorAll("img.emote.staging").forEach((em) => {
@@ -618,6 +885,26 @@ async function fixZeroWidthEmotes(messageId) {
           });
 
           firstContainer.style.width = `${maxWidth}px`;
+
+          // Same wide-base handling for the final set
+          const wideBaseFinal = currentSet.find(e => !e.classList.contains('zero-width') && e.dataset.wide === 'true');
+          if (wideBaseFinal) {
+            const containerH = firstContainer.offsetHeight;
+            if (containerH && wideBaseFinal.naturalWidth && wideBaseFinal.naturalHeight) {
+              const baseW = Math.round(containerH * wideBaseFinal.naturalWidth / wideBaseFinal.naturalHeight);
+              wideBaseFinal.style.width = (baseW * 2) + 'px';
+              wideBaseFinal.style.height = containerH + 'px';
+              wideBaseFinal.onload = null;
+              firstContainer.style.width = (baseW * 2) + 'px';
+            }
+            currentSet.filter(e => e.classList.contains('zero-width')).forEach(zw => {
+              if (containerH && zw.naturalWidth && zw.naturalHeight) {
+                const scaledW = Math.round(containerH * zw.naturalWidth / zw.naturalHeight);
+                zw.style.width = (scaledW * 2) + 'px';
+                zw.style.height = containerH + 'px';
+              }
+            });
+          }
 
           firstContainer.classList.remove("staging");
           firstContainer.querySelectorAll("img.emote.staging").forEach((em) => {
